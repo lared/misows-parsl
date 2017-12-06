@@ -50,9 +50,13 @@ def normalizeWhitespace(paragraph):
 def removeSpecialCharsExceptDots(paragraph):
     return re.sub("[^a-zA-Z0-9\. ]+", "" , paragraph)
 
+@App('python', dfk)
+def divideIntoSentences(paragraph):
+    return [sentence.strip() for sentence in paragraph.split(".") if not isBlank(sentence)]
+
 # done synchronously because it only eats memory
 # for now done in phases to test the algo
-corpusText = "abc    !@#$     \n           .     def" #loadCorpus()
+corpusText = "This sentence does not matter. Neither does this one, ending here:.\n\nThis sentence ends in another line." #loadCorpus()
 
 print(corpusText)
 
@@ -70,3 +74,9 @@ norm_futures = [normalizeWhitespace(paragraph) for paragraph in normalized_parag
 clean_paragraphs = [future.result() for future in norm_futures]
 
 print(clean_paragraphs)
+
+norm_futures = [divideIntoSentences(paragraph) for paragraph in clean_paragraphs]
+sentences = [future.result() for future in norm_futures]
+
+print(sentences)
+
