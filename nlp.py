@@ -47,12 +47,12 @@ def normalizeWhitespace(paragraph):
     return re.sub("\s+", " " , paragraph)
 
 @App('python', dfk)
-def removeSpecialChars(paragraph):
-    return re.sub("[^a-zA-Z0-9 ]+", "" , paragraph)
+def removeSpecialCharsExceptDots(paragraph):
+    return re.sub("[^a-zA-Z0-9\. ]+", "" , paragraph)
 
 # done synchronously because it only eats memory
 # for now done in phases to test the algo
-corpusText = "abc    !@#$     \n                def" #loadCorpus()
+corpusText = "abc    !@#$     \n           .     def" #loadCorpus()
 
 print(corpusText)
 
@@ -61,12 +61,12 @@ paragraphs = step.result()
 
 print(paragraphs)
 
-norm_futures = [normalizeWhitespace(paragraph) for paragraph in paragraphs]
+norm_futures = [removeSpecialCharsExceptDots(paragraph) for paragraph in paragraphs]
 normalized_paragraphs = [future.result() for future in norm_futures]
 
 print(normalized_paragraphs)
 
-norm_futures = [removeSpecialChars(paragraph) for paragraph in normalized_paragraphs]
+norm_futures = [normalizeWhitespace(paragraph) for paragraph in normalized_paragraphs]
 clean_paragraphs = [future.result() for future in norm_futures]
 
 print(clean_paragraphs)
