@@ -1,13 +1,14 @@
 import os
 import re
-import parsl
 from pathlib import Path
 from parsl import *
+from math import log
 
 workers = ThreadPoolExecutor(max_workers=4)
 dfk = DataFlowKernel(workers)
 
 INPUTS_DIR = 'input'
+
 
 def loadCorpus():
     filesToRead = ["{}/{}".format(INPUTS_DIR, filename) \
@@ -20,8 +21,10 @@ def loadCorpus():
 
     return fullText
 
+
 def isBlank(line):
     return not bool(line.strip())
+
 
 @App('python', dfk)
 def divideIntoParagraphs(text):
@@ -42,53 +45,104 @@ def divideIntoParagraphs(text):
     paragraphs.append(" ".join(partialParagraph))
     return [paragraph for paragraph in paragraphs if not isBlank(paragraph)]
 
+
 @App('python', dfk)
 def normalizeWhitespace(paragraph):
     return re.sub("\s+", " " , paragraph)
+
 
 @App('python', dfk)
 def removeSpecialCharsExceptDots(paragraph):
     return re.sub("[^a-zA-Z0-9\. ]+", "" , paragraph)
 
+
 @App('python', dfk)
 def divideIntoSentences(paragraph):
     return [sentence.strip() for sentence in paragraph.split(".") if not isBlank(sentence)]
 
+
+# count the frequency statistic
 @App('python', dfk)
-def calculateKMostCommonNGramsInefficiently(text, n, k):
-    frequency = dict()
-    for i in range(0, len(text)-2):
-        trigram = text[i:i+3]
-        frequency[trigram] = frequency.get(trigram, 0) + 1
+def tf_frequences(paragraphs):
+    tf = [None] * len(paragraphs)
+    for i in range(len(paragraphs)):
+        tf[i] = {}
+        for sentence in paragraphs[i]:
+            for term in sentence.split():
+                if term not in tf[i]:
+                    tf[i][term] = 1
+                else:
+                    tf[i][term] += 1
+    return tf
 
-    sortedMap = sorted(frequency.items(), key=lambda kv: (kv[1],kv[0]))
-    sortedMap = sortedMap[:10]
 
-    return [value for key, value in sortedMap]
+@App('python', dfk)
+def df_frequences(tf):
+    df = {}
+    # df counting, basic on tf
+    for term_list in tf:
+        for term in term_list:
+            if term not in df:
+                df[term] = 1
+            else:
+                df[term] += 1
+    return df
 
 
-# the actual flow setup
+@App('python', dfk)
+def tf_idf_normalization(weigths):
+    for key, value in weigths.items():
+        weigths[key] = 1.*value/len(weigths)
+
+
+@App('python', dfk)
+def tf_idf(paragraphs, tf, df):
+    weigths = [None] * len(paragraphs)
+    for i in range(len(paragraphs)):
+        weigths[i] = {}
+        for sentence in paragraphs[i]:
+            for term in sentence.split():
+                weigths[i][term] = tf[i][term]*log(len(paragraphs)/df[term])
+        tf_idf_normalization(weigths[i])
+    return weigths
+
+# done synchronously because it only eats memory
+# for now done in phases to test the algo
 corpusText = "This sentence does not matter. Neither does this one, ending here:.\n\nThis sentence ends in another line." #loadCorpus()
 
-ngramsFuture = calculateKMostCommonNGramsInefficiently(corpusText, 3, 20)
+print(corpusText)
 
-paragraphsFuture = divideIntoParagraphs(corpusText)
-# we have to wait - it is not possible to fan-out without that
-paragraphs = paragraphsFuture.result()
+step = divideIntoParagraphs(corpusText)
+paragraphs = step.result()
 
-for paragraph in paragraphs:
+print(paragraphs)
 
-    noSpecialsFuture = removeSpecialCharsExceptDots(paragraph)
+norm_futures = [removeSpecialCharsExceptDots(paragraph) for paragraph in paragraphs]
+normalized_paragraphs = [future.result() for future in norm_futures]
 
-    whitespaceNormalizedFuture = normalizeWhitespace(noSpecialsFuture)
+print(normalized_paragraphs)
 
-    sentencesFuture = divideIntoSentences(whitespaceNormalizedFuture)
-    sentences = sentencesFuture.result()
+norm_futures = [normalizeWhitespace(paragraph) for paragraph in normalized_paragraphs]
+clean_paragraphs = [future.result() for future in norm_futures]
 
-    for sentence in sentences:
-        #TODO: calculate stuff
-        print(">>> " + sentence)
-        pass
+print(clean_paragraphs)
 
-mostCommonTrigrams = ngramsFuture.result()
-# TODO: join the ngrams and paragraph stats
+norm_futures = [divideIntoSentences(paragraph) for paragraph in clean_paragraphs]
+sentences = [future.result() for future in norm_futures]
+
+print(sentences)
+
+tf = tf_frequences(sentences)
+tf = tf.result()
+
+print(tf)
+
+df = df_frequences(tf)
+df = df.result()
+
+print(df)
+
+tf_idf_weigths = tf_idf(sentences, tf, df)
+tf_idf_weigths = tf_idf_weigths.result()
+
+print(tf_idf_weigths)
