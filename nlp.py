@@ -54,29 +54,41 @@ def removeSpecialCharsExceptDots(paragraph):
 def divideIntoSentences(paragraph):
     return [sentence.strip() for sentence in paragraph.split(".") if not isBlank(sentence)]
 
-# done synchronously because it only eats memory
-# for now done in phases to test the algo
+@App('python', dfk)
+def calculateKMostCommonNGramsInefficiently(text, n, k):
+    frequency = dict()
+    for i in range(0, len(text)-2):
+        trigram = text[i:i+3]
+        frequency[trigram] = frequency.get(trigram, 0) + 1
+
+    sortedMap = sorted(frequency.items(), key=lambda kv: (kv[1],kv[0]))
+    sortedMap = sortedMap[:10]
+
+    return [value for key, value in sortedMap]
+
+
+# the actual flow setup
 corpusText = "This sentence does not matter. Neither does this one, ending here:.\n\nThis sentence ends in another line." #loadCorpus()
 
-print(corpusText)
+ngramsFuture = calculateKMostCommonNGramsInefficiently(corpusText, 3, 20)
 
-step = divideIntoParagraphs(corpusText)
-paragraphs = step.result()
+paragraphsFuture = divideIntoParagraphs(corpusText)
+# we have to wait - it is not possible to fan-out without that
+paragraphs = paragraphsFuture.result()
 
-print(paragraphs)
+for paragraph in paragraphs:
 
-norm_futures = [removeSpecialCharsExceptDots(paragraph) for paragraph in paragraphs]
-normalized_paragraphs = [future.result() for future in norm_futures]
+    noSpecialsFuture = removeSpecialCharsExceptDots(paragraph)
 
-print(normalized_paragraphs)
+    whitespaceNormalizedFuture = normalizeWhitespace(noSpecialsFuture)
 
-norm_futures = [normalizeWhitespace(paragraph) for paragraph in normalized_paragraphs]
-clean_paragraphs = [future.result() for future in norm_futures]
+    sentencesFuture = divideIntoSentences(whitespaceNormalizedFuture)
+    sentences = sentencesFuture.result()
 
-print(clean_paragraphs)
+    for sentence in sentences:
+        #TODO: calculate stuff
+        print(">>> " + sentence)
+        pass
 
-norm_futures = [divideIntoSentences(paragraph) for paragraph in clean_paragraphs]
-sentences = [future.result() for future in norm_futures]
-
-print(sentences)
-
+mostCommonTrigrams = ngramsFuture.result()
+# TODO: join the ngrams and paragraph stats
